@@ -79,17 +79,19 @@ npm run build
 
 어드민 페이지에서 다음 정보를 입력:
 
-- **Google Sheets API Key**: 생성한 API 키 (읽기 전용)
-- **Google OAuth Client ID**: 생성한 OAuth 클라이언트 ID (키워드 추가/수정/삭제용)
 - **스프레드시트 ID**: URL에서 추출한 ID
 - **시트 이름**: 키워드를 저장할 시트 이름 (기본값: Keywords)
 
+> ✅ **API Key와 OAuth Client ID가 내장되어 있습니다!** 별도로 입력할 필요가 없습니다.
+
 ### 4. 권한 및 인증
 
-- **읽기 작업**: API Key만으로 충분 (스프레드시트가 공개 설정된 경우)
+- **읽기 작업**: 내장된 API Key로 자동 처리 (스프레드시트가 공개 설정된 경우)
 - **쓰기 작업** (키워드 추가/수정/삭제): OAuth 2.0 인증 필요
   - "Google 로그인" 버튼을 클릭하여 인증
   - Google Sheets API 권한 승인
+
+> 📝 **참고**: API Key (`AIzaSyCXPcbpDUUL7zlWT4rSKInoK4x65JSqtj0`)와 OAuth Client ID (`350696285675-bs18lsr5frcgqmr3nurucdcoen1hfrok.apps.googleusercontent.com`)가 코드에 내장되어 있어 별도 설정이 불필요합니다.
 
 ## 키워드 데이터 구조
 
@@ -115,7 +117,7 @@ interface Keyword {
 
 ## 사용법
 
-1. **Google Sheets 설정**: 페이지 상단에서 API 키, 스프레드시트 ID, 시트 이름을 입력하고 저장
+1. **Google Sheets 설정**: 페이지 상단에서 스프레드시트 ID와 시트 이름을 입력하고 저장
 2. **연결 테스트**: "연결 테스트" 버튼으로 Google Sheets 연결 확인
 3. **시트 초기화**: 헤더가 없는 경우 "시트 초기화" 버튼으로 헤더 행 생성
 4. **키워드 검색**: 검색 입력창에서 키워드, 카테고리, 동의어로 검색

@@ -5,16 +5,23 @@ export class GoogleSheetsKeywordAdmin {
   private readonly container: HTMLElement;
   private googleSheetsService: GoogleSheetsService;
   private keywords: Keyword[] = [];
+  
+  // 내장된 API 설정
+  private readonly DEFAULT_CONFIG = {
+    apiKey: 'AIzaSyCXPcbpDUUL7zlWT4rSKInoK4x65JSqtj0',
+    clientId: '350696285675-bs18lsr5frcgqmr3nurucdcoen1hfrok.apps.googleusercontent.com',
+    sheetName: 'Keywords'
+  };
 
   constructor(container: HTMLElement) {
     this.container = container;
     
-    // 기본 Google Sheets 설정 (사용자가 설정해야 함)
+    // 기본 Google Sheets 설정 (내장된 API 키 사용)
     const config: GoogleSheetsConfig = {
-      apiKey: '',
-      clientId: '',
+      apiKey: this.DEFAULT_CONFIG.apiKey,
+      clientId: this.DEFAULT_CONFIG.clientId,
       spreadsheetId: '',
-      sheetName: 'Keywords'
+      sheetName: this.DEFAULT_CONFIG.sheetName
     };
     
     this.googleSheetsService = new GoogleSheetsService(config);
@@ -34,8 +41,6 @@ export class GoogleSheetsKeywordAdmin {
         <div class="config-section">
           <h3>Google Sheets 설정</h3>
           <div class="keyword-form">
-            <input type="text" id="api-key" placeholder="Google Sheets API Key" />
-            <input type="text" id="client-id" placeholder="Google OAuth Client ID" />
             <input type="text" id="spreadsheet-id" placeholder="스프레드시트 ID" />
             <input type="text" id="sheet-name" placeholder="시트 이름 (기본값: Keywords)" value="Keywords" />
             <button id="save-config">설정 저장</button>
@@ -49,31 +54,26 @@ export class GoogleSheetsKeywordAdmin {
           
           <!-- 설정 가이드 -->
           <details style="margin-top: 15px;">
-            <summary style="cursor: pointer; font-weight: bold;">📋 설정 가이드 (권한 오류 해결)</summary>
+            <summary style="cursor: pointer; font-weight: bold;">📋 설정 가이드</summary>
             <div style="margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 4px; font-size: 0.9em;">
-              <h4>1. Google Cloud Console 설정:</h4>
-              <ul>
-                <li>🔗 <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> 접속</li>
-                <li>📂 프로젝트 생성/선택</li>
-                <li>🔌 API 및 서비스 → 라이브러리 → "Google Sheets API" 활성화</li>
-                <li>🗝️ API 및 서비스 → 사용자 인증 정보 → "API 키" 생성</li>
-                <li>🔐 OAuth 2.0 클라이언트 ID 생성 (애플리케이션 유형: 웹 애플리케이션)</li>
-                <li>📍 승인된 JavaScript 원본에 도메인 추가 (예: https://leon-yoo.github.io)</li>
-              </ul>
+              <h4>✅ API 키와 OAuth 클라이언트 ID가 내장되어 있습니다!</h4>
+              <p style="color: #28a745; font-weight: bold;">더 이상 API 키나 클라이언트 ID를 입력할 필요가 없습니다.</p>
               
-              <h4>2. 스프레드시트 설정:</h4>
+              <h4>설정 방법:</h4>
               <ul>
                 <li>📊 <a href="https://sheets.google.com/" target="_blank">Google Sheets</a>에서 스프레드시트 생성</li>
                 <li>🔗 공유 → "링크가 있는 모든 사용자" 권한 부여 ⚠️ <strong>필수!</strong></li>
                 <li>🆔 URL에서 스프레드시트 ID 복사: <code>...sheets/d/<strong>ID</strong>/edit</code></li>
+                <li>⬆️ 위의 "스프레드시트 ID" 필드에 입력</li>
+                <li>💾 "설정 저장" 클릭</li>
+                <li>🔐 "Google 로그인"으로 인증 (키워드 추가/수정/삭제용)</li>
               </ul>
               
               <h4>⚠️ 권한 오류 (403) 해결:</h4>
               <ul>
                 <li>✅ 스프레드시트가 <strong>공개</strong>로 설정되었는지 확인</li>
-                <li>✅ API 키가 올바른지 확인</li>
-                <li>✅ Google Sheets API가 활성화되었는지 확인</li>
                 <li>✅ 스프레드시트 ID가 정확한지 확인</li>
+                <li>✅ 시트 이름이 정확한지 확인 (기본값: Keywords)</li>
               </ul>
             </div>
           </details>
@@ -159,22 +159,20 @@ export class GoogleSheetsKeywordAdmin {
   }
 
   private saveConfig(): void {
-    const apiKey = (document.getElementById('api-key') as HTMLInputElement).value;
-    const clientId = (document.getElementById('client-id') as HTMLInputElement).value;
     const spreadsheetId = (document.getElementById('spreadsheet-id') as HTMLInputElement).value;
     const sheetName = (document.getElementById('sheet-name') as HTMLInputElement).value || 'Keywords';
 
-    if (apiKey && clientId && spreadsheetId) {
+    if (spreadsheetId) {
       const config: GoogleSheetsConfig = {
-        apiKey,
-        clientId,
+        apiKey: this.DEFAULT_CONFIG.apiKey,
+        clientId: this.DEFAULT_CONFIG.clientId,
         spreadsheetId,
         sheetName
       };
       
       this.googleSheetsService = new GoogleSheetsService(config);
       
-      // 로컬 스토리지에 설정 저장 (API 키와 Client ID 제외)
+      // 로컬 스토리지에 설정 저장 (스프레드시트 ID와 시트 이름만)
       localStorage.setItem('sheets-config', JSON.stringify({
         spreadsheetId,
         sheetName
@@ -185,7 +183,7 @@ export class GoogleSheetsKeywordAdmin {
       
       this.showStatus('설정이 저장되었습니다.', 'success');
     } else {
-      this.showStatus('API Key, Client ID, 스프레드시트 ID는 필수입니다.', 'error');
+      this.showStatus('스프레드시트 ID는 필수입니다.', 'error');
     }
   }
 
@@ -316,6 +314,18 @@ export class GoogleSheetsKeywordAdmin {
         const config = JSON.parse(savedConfig);
         (document.getElementById('spreadsheet-id') as HTMLInputElement).value = config.spreadsheetId;
         (document.getElementById('sheet-name') as HTMLInputElement).value = config.sheetName;
+        
+        // 내장된 API 설정으로 서비스 재초기화
+        const fullConfig: GoogleSheetsConfig = {
+          apiKey: this.DEFAULT_CONFIG.apiKey,
+          clientId: this.DEFAULT_CONFIG.clientId,
+          spreadsheetId: config.spreadsheetId,
+          sheetName: config.sheetName
+        };
+        this.googleSheetsService = new GoogleSheetsService(fullConfig);
+        
+        // Google Auth 초기화
+        this.initializeAuth();
       }
 
       this.keywords = await this.googleSheetsService.searchKeywords();
