@@ -12,6 +12,7 @@ export class GoogleAuthService {
   private _apiKey: string = '';
   private authState: AuthState = { isSignedIn: false };
   private onAuthChangeCallback?: (authState: AuthState) => void;
+  private tokenClient: any;
 
   constructor() {
     this.initializeGapi();
@@ -20,7 +21,7 @@ export class GoogleAuthService {
   private async initializeGapi(): Promise<void> {
     if (typeof window !== 'undefined' && window.gapi) {
       await new Promise<void>((resolve) => {
-        window.gapi.load('auth2', resolve);
+        window.gapi.load('client', resolve);
       });
     }
   }
@@ -33,70 +34,108 @@ export class GoogleAuthService {
       throw new Error('Google API library not loaded');
     }
 
-    await window.gapi.load('auth2', async () => {
-      try {
-        const authInstance = await window.gapi.auth2.init({
-          client_id: clientId,
-          scope: 'https://www.googleapis.com/auth/spreadsheets'
-        });
+    if (!window.google) {
+      throw new Error('Google Identity Services library not loaded');
+    }
 
-        // 현재 인증 상태 확인
-        const isSignedIn = authInstance.isSignedIn.get();
-        if (isSignedIn) {
-          const user = authInstance.currentUser.get();
-          this.updateAuthState(user);
-        }
+    try {
+      // GAPI 클라이언트 초기화
+      await window.gapi.client.init({
+        apiKey: apiKey,
+        discoveryDocs: [
+          'https://sheets.googleapis.com/$discovery/rest?version=v4',
+          'https://people.googleapis.com/$discovery/rest?version=v1'
+        ]
+      });
 
-        // 인증 상태 변화 감지
-        authInstance.isSignedIn.listen((isSignedIn: boolean) => {
-          if (isSignedIn) {
-            const user = authInstance.currentUser.get();
-            this.updateAuthState(user);
-          } else {
-            this.authState = { isSignedIn: false };
-            this.onAuthChangeCallback?.(this.authState);
+      // Google Identity Services Token Client 초기화
+      this.tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+        callback: (response: any) => {
+          if (response.error) {
+            console.error('Token response error:', response.error);
+            return;
           }
-        });
-      } catch (error) {
-        console.error('Google Auth initialization failed:', error);
-        throw error;
-      }
-    });
+          
+          // 액세스 토큰을 받았을 때 처리
+          this.handleTokenResponse(response);
+        },
+      });
+
+      console.log('Google Auth initialized successfully');
+    } catch (error) {
+      console.error('Google Auth initialization failed:', error);
+      throw error;
+    }
   }
 
-  private updateAuthState(user: any): void {
-    const profile = user.getBasicProfile();
-    const authResponse = user.getAuthResponse();
-    
-    this.authState = {
-      isSignedIn: true,
-      accessToken: authResponse.access_token,
-      user: {
-        name: profile.getName(),
-        email: profile.getEmail(),
-        picture: profile.getImageUrl()
-      }
-    };
+  private async handleTokenResponse(response: any): Promise<void> {
+    // GAPI 클라이언트에 액세스 토큰 설정
+    window.gapi.client.setToken({
+      access_token: response.access_token
+    });
+
+    try {
+      // 사용자 정보 가져오기
+      const userInfoResponse = await window.gapi.client.request({
+        path: 'https://www.googleapis.com/oauth2/v2/userinfo'
+      });
+
+      const userInfo = userInfoResponse.result;
+      
+      this.authState = {
+        isSignedIn: true,
+        accessToken: response.access_token,
+        user: {
+          name: userInfo.name || 'Google User',
+          email: userInfo.email || 'user@gmail.com',
+          picture: userInfo.picture || ''
+        }
+      };
+    } catch (error) {
+      console.error('Failed to get user info:', error);
+      // 사용자 정보를 가져올 수 없어도 기본값으로 설정
+      this.authState = {
+        isSignedIn: true,
+        accessToken: response.access_token,
+        user: {
+          name: 'Google User',
+          email: 'user@gmail.com',
+          picture: ''
+        }
+      };
+    }
     
     this.onAuthChangeCallback?.(this.authState);
   }
 
   async signIn(): Promise<void> {
-    if (!window.gapi?.auth2) {
+    if (!this.tokenClient) {
       throw new Error('Google Auth not initialized');
     }
 
-    const authInstance = window.gapi.auth2.getAuthInstance();
-    await authInstance.signIn();
+    try {
+      // 토큰 요청 시작
+      this.tokenClient.requestAccessToken({
+        prompt: 'consent'
+      });
+    } catch (error) {
+      console.error('Sign in failed:', error);
+      throw error;
+    }
   }
 
   async signOut(): Promise<void> {
-    if (!window.gapi?.auth2) {
-      throw new Error('Google Auth not initialized');
+    if (this.authState.accessToken) {
+      // 토큰 해제
+      window.google.accounts.oauth2.revoke(this.authState.accessToken, () => {
+        console.log('Token revoked');
+      });
     }
 
-    const authInstance = window.gapi.auth2.getAuthInstance();
-    await authInstance.signOut();
+    this.authState = { isSignedIn: false };
+    this.onAuthChangeCallback?.(this.authState);
   }
 
   getAuthState(): AuthState {

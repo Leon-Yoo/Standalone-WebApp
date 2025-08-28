@@ -57,6 +57,12 @@ npm run build
    - API 및 서비스 → 사용자 인증 정보
    - "사용자 인증 정보 만들기" → "API 키"
    - 생성된 API 키를 복사
+5. OAuth 2.0 클라이언트 ID 생성 (키워드 추가/수정/삭제용):
+   - API 및 서비스 → 사용자 인증 정보
+   - "사용자 인증 정보 만들기" → "OAuth 클라이언트 ID"
+   - 애플리케이션 유형: "웹 애플리케이션"
+   - 승인된 JavaScript 원본: 배포될 도메인 (예: https://leon-yoo.github.io)
+   - 생성된 클라이언트 ID를 복사
 
 ### 2. Google Sheets 스프레드시트 준비
 
@@ -73,9 +79,17 @@ npm run build
 
 어드민 페이지에서 다음 정보를 입력:
 
-- **Google Sheets API Key**: 생성한 API 키
+- **Google Sheets API Key**: 생성한 API 키 (읽기 전용)
+- **Google OAuth Client ID**: 생성한 OAuth 클라이언트 ID (키워드 추가/수정/삭제용)
 - **스프레드시트 ID**: URL에서 추출한 ID
 - **시트 이름**: 키워드를 저장할 시트 이름 (기본값: Keywords)
+
+### 4. 권한 및 인증
+
+- **읽기 작업**: API Key만으로 충분 (스프레드시트가 공개 설정된 경우)
+- **쓰기 작업** (키워드 추가/수정/삭제): OAuth 2.0 인증 필요
+  - "Google 로그인" 버튼을 클릭하여 인증
+  - Google Sheets API 권한 승인
 
 ## 키워드 데이터 구조
 
