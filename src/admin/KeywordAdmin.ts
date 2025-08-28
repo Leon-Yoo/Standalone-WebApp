@@ -41,6 +41,35 @@ export class GoogleSheetsKeywordAdmin {
             <button id="init-sheet">시트 초기화</button>
           </div>
           <div id="connection-status" style="margin-top: 10px;"></div>
+          
+          <!-- 설정 가이드 -->
+          <details style="margin-top: 15px;">
+            <summary style="cursor: pointer; font-weight: bold;">📋 설정 가이드 (권한 오류 해결)</summary>
+            <div style="margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 4px; font-size: 0.9em;">
+              <h4>1. Google Cloud Console 설정:</h4>
+              <ul>
+                <li>🔗 <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> 접속</li>
+                <li>📂 프로젝트 생성/선택</li>
+                <li>🔌 API 및 서비스 → 라이브러리 → "Google Sheets API" 활성화</li>
+                <li>🗝️ API 및 서비스 → 사용자 인증 정보 → "API 키" 생성</li>
+              </ul>
+              
+              <h4>2. 스프레드시트 설정:</h4>
+              <ul>
+                <li>📊 <a href="https://sheets.google.com/" target="_blank">Google Sheets</a>에서 스프레드시트 생성</li>
+                <li>🔗 공유 → "링크가 있는 모든 사용자" 권한 부여 ⚠️ <strong>필수!</strong></li>
+                <li>🆔 URL에서 스프레드시트 ID 복사: <code>...sheets/d/<strong>ID</strong>/edit</code></li>
+              </ul>
+              
+              <h4>⚠️ 권한 오류 (403) 해결:</h4>
+              <ul>
+                <li>✅ 스프레드시트가 <strong>공개</strong>로 설정되었는지 확인</li>
+                <li>✅ API 키가 올바른지 확인</li>
+                <li>✅ Google Sheets API가 활성화되었는지 확인</li>
+                <li>✅ 스프레드시트 ID가 정확한지 확인</li>
+              </ul>
+            </div>
+          </details>
         </div>
 
         <!-- 검색 섹션 -->
@@ -143,15 +172,38 @@ export class GoogleSheetsKeywordAdmin {
   private async testConnection(): Promise<void> {
     try {
       this.showStatus('연결 테스트 중...', 'info');
-      const isConnected = await this.googleSheetsService.testConnection();
-      if (isConnected) {
-        this.showStatus('연결 성공!', 'success');
+      const result = await this.googleSheetsService.testConnection();
+      
+      if (result.success) {
+        this.showStatus(result.message, 'success');
+        
+        // 사용 가능한 시트 목록도 표시
+        if (result.details?.availableSheets?.length > 0) {
+          const sheetsList = result.details.availableSheets.join(', ');
+          setTimeout(() => {
+            this.showStatus(`사용 가능한 시트: ${sheetsList}`, 'info');
+          }, 2000);
+        }
       } else {
-        this.showStatus('연결 실패. 설정을 확인해주세요.', 'error');
+        this.showStatus(result.message, 'error');
+        
+        // 상세한 진단 정보 표시
+        if (result.details?.possibleCauses || result.details?.solutions) {
+          console.log('진단 정보:', result.details);
+          
+          let diagnosticMessage = '진단 정보가 콘솔에 출력되었습니다. ';
+          if (result.details.availableSheets?.length > 0) {
+            diagnosticMessage += `사용 가능한 시트: ${result.details.availableSheets.join(', ')}`;
+          }
+          
+          setTimeout(() => {
+            this.showStatus(diagnosticMessage, 'info');
+          }, 3000);
+        }
       }
     } catch (error) {
       console.error('Connection test failed:', error);
-      this.showStatus('연결 실패. 설정을 확인해주세요.', 'error');
+      this.showStatus('연결 테스트 실패. 설정을 확인해주세요.', 'error');
     }
   }
 
@@ -166,12 +218,12 @@ export class GoogleSheetsKeywordAdmin {
     }
   }
 
-  private showStatus(message: string, type: 'success' | 'error' | 'info'): void {
+  private showStatus(message: string, type: 'success' | 'error' | 'info', duration: number = 5000): void {
     const statusElement = document.getElementById('connection-status')!;
     statusElement.innerHTML = `<div class="status-${type}">${message}</div>`;
     setTimeout(() => {
       statusElement.innerHTML = '';
-    }, 3000);
+    }, duration);
   }
 
   private async loadKeywords(): Promise<void> {

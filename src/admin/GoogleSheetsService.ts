@@ -25,7 +25,18 @@ export class GoogleSheetsService {
     const response = await fetch(url, options);
 
     if (!response.ok) {
-      throw new Error(`Google Sheets API request failed: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || response.statusText;
+      const errorCode = errorData.error?.code || response.status;
+      
+      console.error('Google Sheets API Error:', {
+        code: errorCode,
+        message: errorMessage,
+        status: errorData.error?.status,
+        url: url.replace(this.config.apiKey, '[API_KEY_HIDDEN]')
+      });
+      
+      throw new Error(`Google Sheets API request failed (${errorCode}): ${errorMessage}`);
     }
 
     return response.json();
@@ -230,14 +241,92 @@ export class GoogleSheetsService {
   }
 
   // 설정 테스트용 메서드
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<{ success: boolean; message: string; details?: any }> {
     try {
-      const range = `${this.config.sheetName}!A1:A1`;
-      await this.request('GET', `/values/${range}`);
-      return true;
+      // 먼저 스프레드시트 메타데이터만 확인
+      const metadataUrl = `${this.baseUrl}/${this.config.spreadsheetId}?key=${this.config.apiKey}&fields=properties.title,sheets.properties.title`;
+      
+      const response = await fetch(metadataUrl);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error?.message || response.statusText;
+        const errorCode = errorData.error?.code || response.status;
+        
+        if (errorCode === 403) {
+          return {
+            success: false,
+            message: `권한 오류 (403): ${errorMessage}`,
+            details: {
+              possibleCauses: [
+                '1. API 키가 잘못되었거나 만료됨',
+                '2. 스프레드시트가 공개로 설정되지 않음',
+                '3. API 키에 Google Sheets API 권한이 없음',
+                '4. 스프레드시트 ID가 잘못됨'
+              ],
+              solutions: [
+                '1. Google Cloud Console에서 API 키 확인',
+                '2. 스프레드시트 공유 설정: "링크가 있는 모든 사용자" 권한 부여',
+                '3. Google Sheets API가 활성화되어 있는지 확인',
+                '4. 스프레드시트 URL에서 ID 다시 복사'
+              ]
+            }
+          };
+        } else if (errorCode === 404) {
+          return {
+            success: false,
+            message: `스프레드시트를 찾을 수 없음 (404): ${errorMessage}`,
+            details: {
+              possibleCauses: [
+                '1. 스프레드시트 ID가 잘못됨',
+                '2. 스프레드시트가 삭제됨',
+                '3. 스프레드시트에 접근 권한이 없음'
+              ]
+            }
+          };
+        } else {
+          return {
+            success: false,
+            message: `API 오류 (${errorCode}): ${errorMessage}`,
+            details: { errorCode, errorMessage }
+          };
+        }
+      }
+      
+      const data = await response.json();
+      
+      // 시트 이름 확인
+      const sheetExists = data.sheets?.some((sheet: any) => 
+        sheet.properties.title === this.config.sheetName
+      );
+      
+      if (!sheetExists) {
+        return {
+          success: false,
+          message: `시트 '${this.config.sheetName}'를 찾을 수 없습니다.`,
+          details: {
+            availableSheets: data.sheets?.map((sheet: any) => sheet.properties.title) || [],
+            suggestion: `사용 가능한 시트 이름 중 하나를 선택하세요.`
+          }
+        };
+      }
+      
+      return {
+        success: true,
+        message: `연결 성공! 스프레드시트: "${data.properties.title}", 시트: "${this.config.sheetName}"`,
+        details: {
+          spreadsheetTitle: data.properties.title,
+          availableSheets: data.sheets?.map((sheet: any) => sheet.properties.title) || []
+        }
+      };
+      
     } catch (error) {
-      console.error('Google Sheets connection test failed:', error);
-      return false;
+      console.error('Connection test failed:', error);
+      return {
+        success: false,
+        message: `연결 테스트 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`,
+        details: { error: error instanceof Error ? error.message : error }
+      };
     }
   }
 }
