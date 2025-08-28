@@ -1,22 +1,22 @@
-import { Keyword, ElasticsearchConfig } from './types';
-import { ElasticsearchService } from './ElasticsearchService';
+import { Keyword, GoogleSheetsConfig } from './types';
+import { GoogleSheetsService } from './GoogleSheetsService';
 
-export class ElasticsearchKeywordAdmin {
-  private container: HTMLElement;
-  private elasticsearchService: ElasticsearchService;
+export class GoogleSheetsKeywordAdmin {
+  private readonly container: HTMLElement;
+  private googleSheetsService: GoogleSheetsService;
   private keywords: Keyword[] = [];
 
   constructor(container: HTMLElement) {
     this.container = container;
     
-    // 기본 Elasticsearch 설정 (환경변수나 설정 파일에서 가져올 수 있음)
-    const config: ElasticsearchConfig = {
-      endpoint: 'http://localhost:9200', // 개발 환경 기본값
-      index: 'keywords',
-      apiKey: undefined // 필요에 따라 설정
+    // 기본 Google Sheets 설정 (사용자가 설정해야 함)
+    const config: GoogleSheetsConfig = {
+      apiKey: '',
+      spreadsheetId: '',
+      sheetName: 'Keywords'
     };
     
-    this.elasticsearchService = new ElasticsearchService(config);
+    this.googleSheetsService = new GoogleSheetsService(config);
   }
 
   async init(): Promise<void> {
@@ -27,17 +27,20 @@ export class ElasticsearchKeywordAdmin {
   private render(): void {
     this.container.innerHTML = `
       <div class="admin-container">
-        <h2>Elasticsearch Keyword Management</h2>
+        <h2>Google Sheets Keyword Management</h2>
         
         <!-- 설정 섹션 -->
         <div class="config-section">
-          <h3>Elasticsearch 설정</h3>
+          <h3>Google Sheets 설정</h3>
           <div class="keyword-form">
-            <input type="text" id="es-endpoint" placeholder="Elasticsearch Endpoint (예: http://localhost:9200)" />
-            <input type="text" id="es-index" placeholder="Index Name (예: keywords)" />
-            <input type="text" id="es-apikey" placeholder="API Key (선택사항)" />
+            <input type="text" id="api-key" placeholder="Google Sheets API Key" />
+            <input type="text" id="spreadsheet-id" placeholder="스프레드시트 ID" />
+            <input type="text" id="sheet-name" placeholder="시트 이름 (기본값: Keywords)" value="Keywords" />
             <button id="save-config">설정 저장</button>
+            <button id="test-connection">연결 테스트</button>
+            <button id="init-sheet">시트 초기화</button>
           </div>
+          <div id="connection-status" style="margin-top: 10px;"></div>
         </div>
 
         <!-- 검색 섹션 -->
@@ -77,6 +80,16 @@ export class ElasticsearchKeywordAdmin {
       this.saveConfig();
     });
 
+    // 연결 테스트
+    document.getElementById('test-connection')?.addEventListener('click', () => {
+      this.testConnection();
+    });
+
+    // 시트 초기화
+    document.getElementById('init-sheet')?.addEventListener('click', () => {
+      this.initializeSheet();
+    });
+
     // 검색
     document.getElementById('search-btn')?.addEventListener('click', () => {
       this.search();
@@ -101,53 +114,89 @@ export class ElasticsearchKeywordAdmin {
   }
 
   private saveConfig(): void {
-    const endpoint = (document.getElementById('es-endpoint') as HTMLInputElement).value;
-    const index = (document.getElementById('es-index') as HTMLInputElement).value;
-    const apiKey = (document.getElementById('es-apikey') as HTMLInputElement).value;
+    const apiKey = (document.getElementById('api-key') as HTMLInputElement).value;
+    const spreadsheetId = (document.getElementById('spreadsheet-id') as HTMLInputElement).value;
+    const sheetName = (document.getElementById('sheet-name') as HTMLInputElement).value || 'Keywords';
 
-    if (endpoint && index) {
-      const config: ElasticsearchConfig = {
-        endpoint,
-        index,
-        apiKey: apiKey || undefined
+    if (apiKey && spreadsheetId) {
+      const config: GoogleSheetsConfig = {
+        apiKey,
+        spreadsheetId,
+        sheetName
       };
       
-      this.elasticsearchService = new ElasticsearchService(config);
+      this.googleSheetsService = new GoogleSheetsService(config);
       
-      // 로컬 스토리지에 설정 저장
-      localStorage.setItem('es-config', JSON.stringify(config));
+      // 로컬 스토리지에 설정 저장 (API 키 제외)
+      localStorage.setItem('sheets-config', JSON.stringify({
+        spreadsheetId,
+        sheetName
+      }));
       
-      alert('설정이 저장되었습니다.');
+      this.showStatus('설정이 저장되었습니다.', 'success');
       this.loadKeywords();
     } else {
-      alert('Endpoint와 Index는 필수입니다.');
+      this.showStatus('API Key와 스프레드시트 ID는 필수입니다.', 'error');
     }
+  }
+
+  private async testConnection(): Promise<void> {
+    try {
+      this.showStatus('연결 테스트 중...', 'info');
+      const isConnected = await this.googleSheetsService.testConnection();
+      if (isConnected) {
+        this.showStatus('연결 성공!', 'success');
+      } else {
+        this.showStatus('연결 실패. 설정을 확인해주세요.', 'error');
+      }
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      this.showStatus('연결 실패. 설정을 확인해주세요.', 'error');
+    }
+  }
+
+  private async initializeSheet(): Promise<void> {
+    try {
+      this.showStatus('시트 초기화 중...', 'info');
+      await this.googleSheetsService.initializeSheet();
+      this.showStatus('시트가 초기화되었습니다.', 'success');
+    } catch (error) {
+      console.error('Sheet initialization failed:', error);
+      this.showStatus('시트 초기화에 실패했습니다.', 'error');
+    }
+  }
+
+  private showStatus(message: string, type: 'success' | 'error' | 'info'): void {
+    const statusElement = document.getElementById('connection-status')!;
+    statusElement.innerHTML = `<div class="status-${type}">${message}</div>`;
+    setTimeout(() => {
+      statusElement.innerHTML = '';
+    }, 3000);
   }
 
   private async loadKeywords(): Promise<void> {
     try {
       // 저장된 설정 로드
-      const savedConfig = localStorage.getItem('es-config');
+      const savedConfig = localStorage.getItem('sheets-config');
       if (savedConfig) {
         const config = JSON.parse(savedConfig);
-        (document.getElementById('es-endpoint') as HTMLInputElement).value = config.endpoint;
-        (document.getElementById('es-index') as HTMLInputElement).value = config.index;
-        (document.getElementById('es-apikey') as HTMLInputElement).value = config.apiKey || '';
+        (document.getElementById('spreadsheet-id') as HTMLInputElement).value = config.spreadsheetId;
+        (document.getElementById('sheet-name') as HTMLInputElement).value = config.sheetName;
       }
 
-      this.keywords = await this.elasticsearchService.searchKeywords();
+      this.keywords = await this.googleSheetsService.searchKeywords();
       this.renderKeywords();
     } catch (error) {
       console.error('키워드 로딩 실패:', error);
       document.getElementById('keywords-container')!.innerHTML = 
-        '<p>키워드를 로딩할 수 없습니다. Elasticsearch 설정을 확인해주세요.</p>';
+        '<p>키워드를 로딩할 수 없습니다. Google Sheets 설정을 확인해주세요.</p>';
     }
   }
 
   private async search(): Promise<void> {
     const query = (document.getElementById('search-input') as HTMLInputElement).value;
     try {
-      this.keywords = await this.elasticsearchService.searchKeywords(query);
+      this.keywords = await this.googleSheetsService.searchKeywords(query);
       this.renderKeywords();
     } catch (error) {
       console.error('검색 실패:', error);
@@ -161,12 +210,12 @@ export class ElasticsearchKeywordAdmin {
     const synonymsInput = (document.getElementById('new-synonyms') as HTMLInputElement).value;
 
     if (!term || !category) {
-      alert('키워드와 카테고리는 필수입니다.');
+      this.showStatus('키워드와 카테고리는 필수입니다.', 'error');
       return;
     }
 
     try {
-      const newKeyword = await this.elasticsearchService.createKeyword({
+      const newKeyword = await this.googleSheetsService.createKeyword({
         term,
         category,
         boost: boostInput ? parseFloat(boostInput) : undefined,
@@ -176,10 +225,10 @@ export class ElasticsearchKeywordAdmin {
       this.keywords.unshift(newKeyword);
       this.renderKeywords();
       this.clearForm();
-      alert('키워드가 추가되었습니다.');
+      this.showStatus('키워드가 추가되었습니다.', 'success');
     } catch (error) {
       console.error('키워드 추가 실패:', error);
-      alert('키워드 추가에 실패했습니다.');
+      this.showStatus('키워드 추가에 실패했습니다.', 'error');
     }
   }
 
@@ -189,13 +238,13 @@ export class ElasticsearchKeywordAdmin {
     }
 
     try {
-      await this.elasticsearchService.deleteKeyword(id);
+      await this.googleSheetsService.deleteKeyword(id);
       this.keywords = this.keywords.filter(k => k.id !== id);
       this.renderKeywords();
-      alert('키워드가 삭제되었습니다.');
+      this.showStatus('키워드가 삭제되었습니다.', 'success');
     } catch (error) {
       console.error('키워드 삭제 실패:', error);
-      alert('키워드 삭제에 실패했습니다.');
+      this.showStatus('키워드 삭제에 실패했습니다.', 'error');
     }
   }
 
@@ -240,3 +289,6 @@ export class ElasticsearchKeywordAdmin {
     await this.handleDeleteKeyword(id);
   }
 }
+
+// 하위 호환성을 위한 별칭 export
+export { GoogleSheetsKeywordAdmin as ElasticsearchKeywordAdmin };
