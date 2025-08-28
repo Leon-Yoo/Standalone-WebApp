@@ -19,6 +19,18 @@ export class GoogleSheetsService {
     return this.authService;
   }
 
+  getConfig(): GoogleSheetsConfig {
+    return { ...this.config }; // 복사본 반환하여 외부에서 수정 방지
+  }
+
+  getApiKey(): string {
+    return this.config.apiKey;
+  }
+
+  getClientId(): string {
+    return this.config.clientId;
+  }
+
   private async request(method: string, path: string, body?: any, requireAuth: boolean = false): Promise<any> {
     const url = `${this.baseUrl}/${this.config.spreadsheetId}${path}`;
     

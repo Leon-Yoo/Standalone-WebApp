@@ -45,6 +45,7 @@ export class GoogleSheetsKeywordAdmin {
             <input type="text" id="sheet-name" placeholder="시트 이름 (기본값: Keywords)" value="Keywords" />
             <button id="save-config">설정 저장</button>
             <button id="test-connection">연결 테스트</button>
+            <button id="check-api-config">API 설정 확인</button>
             <button id="sign-in" style="display: none;">Google 로그인</button>
             <button id="sign-out" style="display: none;">로그아웃</button>
             <button id="init-sheet">시트 초기화</button>
@@ -119,6 +120,11 @@ export class GoogleSheetsKeywordAdmin {
     // 연결 테스트
     document.getElementById('test-connection')?.addEventListener('click', () => {
       this.testConnection();
+    });
+
+    // API 설정 확인
+    document.getElementById('check-api-config')?.addEventListener('click', () => {
+      this.checkApiConfig();
     });
 
     // 로그인/로그아웃
@@ -293,6 +299,67 @@ export class GoogleSheetsKeywordAdmin {
       console.error('Connection test failed:', error);
       this.showStatus('연결 테스트 실패. 설정을 확인해주세요.', 'error');
     }
+  }
+
+  private checkApiConfig(): void {
+    const maskedApiKey = this.maskSensitiveData(this.DEFAULT_CONFIG.apiKey);
+    const maskedClientId = this.maskSensitiveData(this.DEFAULT_CONFIG.clientId);
+    
+    // 현재 Google Sheets Service에서 사용 중인 설정도 확인
+    const currentConfig = this.googleSheetsService.getConfig();
+    const isConfigured = currentConfig.spreadsheetId ? '✅' : '❌';
+    
+    const configInfo = `
+      <div style="font-family: monospace; font-size: 0.9em; background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 10px;">
+        <h4 style="margin-top: 0; color: #28a745;">🔧 현재 API 설정</h4>
+        <div style="margin-bottom: 10px;">
+          <strong>API Key (내장):</strong><br>
+          <code style="background-color: #e9ecef; padding: 2px 4px; border-radius: 2px;">${maskedApiKey}</code>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <strong>OAuth Client ID (내장):</strong><br>
+          <code style="background-color: #e9ecef; padding: 2px 4px; border-radius: 2px;">${maskedClientId}</code>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <strong>스프레드시트 설정:</strong> ${isConfigured}<br>
+          ${currentConfig.spreadsheetId ? 
+            `<code style="background-color: #e9ecef; padding: 2px 4px; border-radius: 2px;">${this.maskSensitiveData(currentConfig.spreadsheetId)}</code>` : 
+            '<span style="color: #dc3545;">설정되지 않음</span>'
+          }
+        </div>
+        <div style="margin-bottom: 10px;">
+          <strong>시트 이름:</strong> <code style="background-color: #e9ecef; padding: 2px 4px; border-radius: 2px;">${currentConfig.sheetName}</code>
+        </div>
+        <div style="margin-top: 15px; padding: 10px; background-color: #d1ecf1; border-radius: 3px; border-left: 3px solid #bee5eb;">
+          <small style="color: #0c5460;">
+            ℹ️ 보안상 일부 문자는 마스킹되어 표시됩니다.<br>
+            API 키와 클라이언트 ID는 코드에 내장되어 변경할 수 없습니다.
+          </small>
+        </div>
+      </div>
+    `;
+    
+    // 상태 메시지 영역에 설정 정보 표시
+    const statusElement = document.getElementById('connection-status')!;
+    statusElement.innerHTML = configInfo;
+    
+    // 8초 후 메시지 제거
+    setTimeout(() => {
+      statusElement.innerHTML = '';
+    }, 8000);
+  }
+
+  private maskSensitiveData(data: string): string {
+    if (!data || data.length < 8) {
+      return '***';
+    }
+    
+    // 앞의 4자리와 뒤의 4자리만 보여주고 나머지는 마스킹
+    const start = data.substring(0, 4);
+    const end = data.substring(data.length - 4);
+    const middle = '*'.repeat(Math.max(data.length - 8, 3));
+    
+    return `${start}${middle}${end}`;
   }
 
   private async initializeSheet(): Promise<void> {
