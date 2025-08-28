@@ -257,12 +257,20 @@ export class GoogleSheetsKeywordAdmin {
       if (result.success) {
         this.showStatus(result.message, 'success');
         
+        // 연결 성공 후 키워드 목록 로드 시도
+        try {
+          await this.loadKeywords();
+        } catch (loadError) {
+          console.error('키워드 로딩 실패:', loadError);
+          this.showStatus('연결은 성공했지만 키워드 로딩에 실패했습니다. 시트 이름을 확인해주세요.', 'error');
+        }
+        
         // 사용 가능한 시트 목록도 표시
         if (result.details?.availableSheets?.length > 0) {
           const sheetsList = result.details.availableSheets.join(', ');
           setTimeout(() => {
             this.showStatus(`사용 가능한 시트: ${sheetsList}`, 'info');
-          }, 2000);
+          }, 3000);
         }
       } else {
         this.showStatus(result.message, 'error');
@@ -332,18 +340,40 @@ export class GoogleSheetsKeywordAdmin {
       this.renderKeywords();
     } catch (error) {
       console.error('키워드 로딩 실패:', error);
-      document.getElementById('keywords-container')!.innerHTML = 
-        '<p>키워드를 로딩할 수 없습니다. Google Sheets 설정을 확인해주세요.</p>';
+      // 설정이 완료되지 않은 경우 안내 메시지 표시
+      const savedConfig = localStorage.getItem('sheets-config');
+      if (!savedConfig) {
+        document.getElementById('keywords-container')!.innerHTML = 
+          '<p class="status-info">📝 먼저 스프레드시트 ID를 설정하고 저장해주세요.</p>';
+      } else {
+        document.getElementById('keywords-container')!.innerHTML = 
+          '<p class="status-error">❌ 키워드를 로딩할 수 없습니다. Google Sheets 설정과 권한을 확인해주세요.</p>';
+      }
     }
   }
 
   private async search(): Promise<void> {
     const query = (document.getElementById('search-input') as HTMLInputElement).value;
+    
+    // 설정이 완료되지 않은 경우 검색하지 않음
+    const savedConfig = localStorage.getItem('sheets-config');
+    if (!savedConfig) {
+      this.showStatus('먼저 스프레드시트 설정을 완료해주세요.', 'error');
+      return;
+    }
+    
     try {
       this.keywords = await this.googleSheetsService.searchKeywords(query);
       this.renderKeywords();
+      
+      // 검색 결과 안내
+      if (query?.trim()) {
+        const resultCount = this.keywords.length;
+        this.showStatus(`검색 결과: ${resultCount}개의 키워드를 찾았습니다.`, 'success');
+      }
     } catch (error) {
       console.error('검색 실패:', error);
+      this.showStatus('검색 중 오류가 발생했습니다. 네트워크 연결과 설정을 확인해주세요.', 'error');
     }
   }
 
@@ -359,20 +389,20 @@ export class GoogleSheetsKeywordAdmin {
     }
 
     try {
-      const newKeyword = await this.googleSheetsService.createKeyword({
+      await this.googleSheetsService.createKeyword({
         term,
         category,
         boost: boostInput ? parseFloat(boostInput) : undefined,
         synonyms: synonymsInput ? synonymsInput.split(',').map(s => s.trim()) : undefined
       });
 
-      this.keywords.unshift(newKeyword);
-      this.renderKeywords();
+      // 키워드 추가 후 전체 목록을 다시 로드
+      await this.loadKeywords();
       this.clearForm();
       this.showStatus('키워드가 추가되었습니다.', 'success');
     } catch (error) {
       console.error('키워드 추가 실패:', error);
-      this.showStatus('키워드 추가에 실패했습니다.', 'error');
+      this.showStatus('키워드 추가에 실패했습니다. Google 로그인이 필요할 수 있습니다.', 'error');
     }
   }
 
@@ -383,12 +413,12 @@ export class GoogleSheetsKeywordAdmin {
 
     try {
       await this.googleSheetsService.deleteKeyword(id);
-      this.keywords = this.keywords.filter(k => k.id !== id);
-      this.renderKeywords();
+      // 삭제 후 전체 목록을 다시 로드
+      await this.loadKeywords();
       this.showStatus('키워드가 삭제되었습니다.', 'success');
     } catch (error) {
       console.error('키워드 삭제 실패:', error);
-      this.showStatus('키워드 삭제에 실패했습니다.', 'error');
+      this.showStatus('키워드 삭제에 실패했습니다. Google 로그인이 필요할 수 있습니다.', 'error');
     }
   }
 
@@ -396,7 +426,17 @@ export class GoogleSheetsKeywordAdmin {
     const container = document.getElementById('keywords-container')!;
     
     if (this.keywords.length === 0) {
-      container.innerHTML = '<p>키워드가 없습니다.</p>';
+      const searchInput = (document.getElementById('search-input') as HTMLInputElement)?.value;
+      if (searchInput?.trim()) {
+        container.innerHTML = '<p class="status-info">🔍 검색 결과가 없습니다. 다른 키워드로 검색해보세요.</p>';
+      } else {
+        container.innerHTML = `
+          <div class="status-info">
+            <p>📄 아직 키워드가 없습니다.</p>
+            <p>아래 폼을 사용하여 첫 번째 키워드를 추가해보세요!</p>
+          </div>
+        `;
+      }
       return;
     }
 

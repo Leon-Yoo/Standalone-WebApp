@@ -106,7 +106,7 @@ export class GoogleSheetsService {
       const response = await this.request('GET', `/values/${range}`, undefined, false); // 읽기는 인증 불필요
       
       if (!response.values || response.values.length <= 1) {
-        return this.getMockKeywords();
+        return []; // 빈 배열 반환
       }
 
       // 첫 번째 행은 헤더이므로 제외
@@ -116,8 +116,8 @@ export class GoogleSheetsService {
       );
 
       // 쿼리가 있으면 필터링
-      if (query) {
-        const searchTerm = query.toLowerCase();
+      if (query && query.trim()) {
+        const searchTerm = query.toLowerCase().trim();
         keywords = keywords.filter((keyword: Keyword) => 
           keyword.term.toLowerCase().includes(searchTerm) ||
           keyword.category.toLowerCase().includes(searchTerm) ||
@@ -128,7 +128,7 @@ export class GoogleSheetsService {
       return keywords;
     } catch (error) {
       console.error('Error fetching from Google Sheets:', error);
-      return this.getMockKeywords();
+      throw error; // 에러를 다시 throw하여 호출하는 쪽에서 처리하도록 함
     }
   }
 
@@ -240,38 +240,6 @@ export class GoogleSheetsService {
     } catch (error) {
       console.error('Error initializing Google Sheets:', error);
     }
-  }
-
-  private getMockKeywords(): Keyword[] {
-    return [
-      {
-        id: '1',
-        term: 'typescript',
-        category: 'programming',
-        boost: 1.5,
-        synonyms: ['ts', 'javascript with types'],
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z'
-      },
-      {
-        id: '2',
-        term: 'google sheets',
-        category: 'database',
-        boost: 2.0,
-        synonyms: ['sheets', 'spreadsheet', 'google drive'],
-        created_at: '2024-01-02T00:00:00Z',
-        updated_at: '2024-01-02T00:00:00Z'
-      },
-      {
-        id: '3',
-        term: 'vite',
-        category: 'build-tool',
-        boost: 1.2,
-        synonyms: ['frontend build tool'],
-        created_at: '2024-01-03T00:00:00Z',
-        updated_at: '2024-01-03T00:00:00Z'
-      }
-    ];
   }
 
   // 설정 테스트용 메서드
