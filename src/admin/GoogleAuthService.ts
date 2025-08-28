@@ -43,15 +43,14 @@ export class GoogleAuthService {
       await window.gapi.client.init({
         apiKey: apiKey,
         discoveryDocs: [
-          'https://sheets.googleapis.com/$discovery/rest?version=v4',
-          'https://people.googleapis.com/$discovery/rest?version=v1'
+          'https://sheets.googleapis.com/$discovery/rest?version=v4'
         ]
       });
 
       // Google Identity Services Token Client 초기화
       this.tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
-        scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+        scope: 'https://www.googleapis.com/auth/spreadsheets',
         callback: (response: any) => {
           if (response.error) {
             console.error('Token response error:', response.error);
@@ -76,36 +75,16 @@ export class GoogleAuthService {
       access_token: response.access_token
     });
 
-    try {
-      // 사용자 정보 가져오기
-      const userInfoResponse = await window.gapi.client.request({
-        path: 'https://www.googleapis.com/oauth2/v2/userinfo'
-      });
-
-      const userInfo = userInfoResponse.result;
-      
-      this.authState = {
-        isSignedIn: true,
-        accessToken: response.access_token,
-        user: {
-          name: userInfo.name || 'Google User',
-          email: userInfo.email || 'user@gmail.com',
-          picture: userInfo.picture || ''
-        }
-      };
-    } catch (error) {
-      console.error('Failed to get user info:', error);
-      // 사용자 정보를 가져올 수 없어도 기본값으로 설정
-      this.authState = {
-        isSignedIn: true,
-        accessToken: response.access_token,
-        user: {
-          name: 'Google User',
-          email: 'user@gmail.com',
-          picture: ''
-        }
-      };
-    }
+    // People API 없이 기본 사용자 정보로 설정
+    this.authState = {
+      isSignedIn: true,
+      accessToken: response.access_token,
+      user: {
+        name: 'Google User',
+        email: 'user@example.com',
+        picture: ''
+      }
+    };
     
     this.onAuthChangeCallback?.(this.authState);
   }
