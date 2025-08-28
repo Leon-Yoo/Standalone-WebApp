@@ -1,4 +1,4 @@
-import { Keyword, GoogleSheetsConfig } from './types';
+import { Keyword, GoogleSheetsConfig, AuthState } from './types';
 import { GoogleSheetsService } from './GoogleSheetsService';
 
 export class GoogleSheetsKeywordAdmin {
@@ -12,6 +12,7 @@ export class GoogleSheetsKeywordAdmin {
     // 기본 Google Sheets 설정 (사용자가 설정해야 함)
     const config: GoogleSheetsConfig = {
       apiKey: '',
+      clientId: '',
       spreadsheetId: '',
       sheetName: 'Keywords'
     };
@@ -34,12 +35,16 @@ export class GoogleSheetsKeywordAdmin {
           <h3>Google Sheets 설정</h3>
           <div class="keyword-form">
             <input type="text" id="api-key" placeholder="Google Sheets API Key" />
+            <input type="text" id="client-id" placeholder="Google OAuth Client ID" />
             <input type="text" id="spreadsheet-id" placeholder="스프레드시트 ID" />
             <input type="text" id="sheet-name" placeholder="시트 이름 (기본값: Keywords)" value="Keywords" />
             <button id="save-config">설정 저장</button>
             <button id="test-connection">연결 테스트</button>
+            <button id="sign-in" style="display: none;">Google 로그인</button>
+            <button id="sign-out" style="display: none;">로그아웃</button>
             <button id="init-sheet">시트 초기화</button>
           </div>
+          <div id="auth-status" style="margin-top: 10px;"></div>
           <div id="connection-status" style="margin-top: 10px;"></div>
           
           <!-- 설정 가이드 -->
@@ -52,6 +57,8 @@ export class GoogleSheetsKeywordAdmin {
                 <li>📂 프로젝트 생성/선택</li>
                 <li>🔌 API 및 서비스 → 라이브러리 → "Google Sheets API" 활성화</li>
                 <li>🗝️ API 및 서비스 → 사용자 인증 정보 → "API 키" 생성</li>
+                <li>🔐 OAuth 2.0 클라이언트 ID 생성 (애플리케이션 유형: 웹 애플리케이션)</li>
+                <li>📍 승인된 JavaScript 원본에 도메인 추가 (예: https://leon-yoo.github.io)</li>
               </ul>
               
               <h4>2. 스프레드시트 설정:</h4>
@@ -114,6 +121,15 @@ export class GoogleSheetsKeywordAdmin {
       this.testConnection();
     });
 
+    // 로그인/로그아웃
+    document.getElementById('sign-in')?.addEventListener('click', () => {
+      this.signIn();
+    });
+
+    document.getElementById('sign-out')?.addEventListener('click', () => {
+      this.signOut();
+    });
+
     // 시트 초기화
     document.getElementById('init-sheet')?.addEventListener('click', () => {
       this.initializeSheet();
@@ -144,28 +160,94 @@ export class GoogleSheetsKeywordAdmin {
 
   private saveConfig(): void {
     const apiKey = (document.getElementById('api-key') as HTMLInputElement).value;
+    const clientId = (document.getElementById('client-id') as HTMLInputElement).value;
     const spreadsheetId = (document.getElementById('spreadsheet-id') as HTMLInputElement).value;
     const sheetName = (document.getElementById('sheet-name') as HTMLInputElement).value || 'Keywords';
 
-    if (apiKey && spreadsheetId) {
+    if (apiKey && clientId && spreadsheetId) {
       const config: GoogleSheetsConfig = {
         apiKey,
+        clientId,
         spreadsheetId,
         sheetName
       };
       
       this.googleSheetsService = new GoogleSheetsService(config);
       
-      // 로컬 스토리지에 설정 저장 (API 키 제외)
+      // 로컬 스토리지에 설정 저장 (API 키와 Client ID 제외)
       localStorage.setItem('sheets-config', JSON.stringify({
         spreadsheetId,
         sheetName
       }));
       
+      // Google Auth 초기화
+      this.initializeAuth();
+      
       this.showStatus('설정이 저장되었습니다.', 'success');
-      this.loadKeywords();
     } else {
-      this.showStatus('API Key와 스프레드시트 ID는 필수입니다.', 'error');
+      this.showStatus('API Key, Client ID, 스프레드시트 ID는 필수입니다.', 'error');
+    }
+  }
+
+  private async initializeAuth(): Promise<void> {
+    try {
+      await this.googleSheetsService.initialize();
+      
+      // 인증 상태 변화 감지
+      this.googleSheetsService.getAuthService().onAuthChange((authState: AuthState) => {
+        this.updateAuthUI(authState);
+      });
+      
+      // 현재 인증 상태 표시
+      const authState = this.googleSheetsService.getAuthService().getAuthState();
+      this.updateAuthUI(authState);
+      
+    } catch (error) {
+      console.error('Auth initialization failed:', error);
+      this.showStatus('인증 초기화에 실패했습니다.', 'error');
+    }
+  }
+
+  private updateAuthUI(authState: AuthState): void {
+    const signInBtn = document.getElementById('sign-in') as HTMLButtonElement;
+    const signOutBtn = document.getElementById('sign-out') as HTMLButtonElement;
+    const authStatusEl = document.getElementById('auth-status')!;
+    
+    if (authState.isSignedIn && authState.user) {
+      signInBtn.style.display = 'none';
+      signOutBtn.style.display = 'inline-block';
+      authStatusEl.innerHTML = `
+        <div class="status-success">
+          ✅ 로그인됨: ${authState.user.name} (${authState.user.email})
+        </div>
+      `;
+      this.loadKeywords(); // 인증 후 키워드 로드
+    } else {
+      signInBtn.style.display = 'inline-block';
+      signOutBtn.style.display = 'none';
+      authStatusEl.innerHTML = `
+        <div class="status-info">
+          ℹ️ 키워드 추가/수정/삭제를 위해 Google 로그인이 필요합니다.
+        </div>
+      `;
+    }
+  }
+
+  private async signIn(): Promise<void> {
+    try {
+      await this.googleSheetsService.getAuthService().signIn();
+    } catch (error) {
+      console.error('Sign in failed:', error);
+      this.showStatus('로그인에 실패했습니다.', 'error');
+    }
+  }
+
+  private async signOut(): Promise<void> {
+    try {
+      await this.googleSheetsService.getAuthService().signOut();
+    } catch (error) {
+      console.error('Sign out failed:', error);
+      this.showStatus('로그아웃에 실패했습니다.', 'error');
     }
   }
 

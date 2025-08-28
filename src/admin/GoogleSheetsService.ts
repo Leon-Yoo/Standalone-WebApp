@@ -1,21 +1,51 @@
 import { Keyword, GoogleSheetsConfig } from './types';
+import { GoogleAuthService } from './GoogleAuthService';
 
 export class GoogleSheetsService {
   private config: GoogleSheetsConfig;
+  private authService: GoogleAuthService;
   private baseUrl = 'https://sheets.googleapis.com/v4/spreadsheets';
 
   constructor(config: GoogleSheetsConfig) {
     this.config = config;
+    this.authService = new GoogleAuthService();
   }
 
-  private async request(method: string, path: string, body?: any): Promise<any> {
-    const url = `${this.baseUrl}/${this.config.spreadsheetId}${path}?key=${this.config.apiKey}`;
+  async initialize(): Promise<void> {
+    await this.authService.initialize(this.config.apiKey, this.config.clientId);
+  }
+
+  getAuthService(): GoogleAuthService {
+    return this.authService;
+  }
+
+  private async request(method: string, path: string, body?: any, requireAuth: boolean = false): Promise<any> {
+    const url = `${this.baseUrl}/${this.config.spreadsheetId}${path}`;
     
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+
+    // 인증이 필요한 경우 Access Token 사용, 아니면 API Key 사용
+    if (requireAuth) {
+      const accessToken = this.authService.getAccessToken();
+      if (!accessToken) {
+        throw new Error('Authentication required. Please sign in to Google.');
+      }
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    } else {
+      // 읽기 전용 작업은 API Key 사용
+      const urlWithKey = `${url}?key=${this.config.apiKey}`;
+      return this.makeRequest(urlWithKey, method, headers, body);
+    }
+
+    return this.makeRequest(url, method, headers, body);
+  }
+
+  private async makeRequest(url: string, method: string, headers: HeadersInit, body?: any): Promise<any> {
     const options: RequestInit = {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     };
 
     if (body && method !== 'GET') {
@@ -33,8 +63,12 @@ export class GoogleSheetsService {
         code: errorCode,
         message: errorMessage,
         status: errorData.error?.status,
-        url: url.replace(this.config.apiKey, '[API_KEY_HIDDEN]')
+        url: url.includes('key=') ? url.replace(/key=[\w-]+/, 'key=[API_KEY_HIDDEN]') : url
       });
+      
+      if (errorCode === 401 || errorCode === 403) {
+        throw new Error(`Authentication required (${errorCode}): ${errorMessage}`);
+      }
       
       throw new Error(`Google Sheets API request failed (${errorCode}): ${errorMessage}`);
     }
@@ -69,7 +103,7 @@ export class GoogleSheetsService {
   async searchKeywords(query?: string): Promise<Keyword[]> {
     try {
       const range = `${this.config.sheetName}!A:G`;
-      const response = await this.request('GET', `/values/${range}`);
+      const response = await this.request('GET', `/values/${range}`, undefined, false); // 읽기는 인증 불필요
       
       if (!response.values || response.values.length <= 1) {
         return this.getMockKeywords();
@@ -114,7 +148,7 @@ export class GoogleSheetsService {
       
       await this.request('POST', `/values/${range}:append?valueInputOption=USER_ENTERED`, {
         values
-      });
+      }, true); // 쓰기 작업은 인증 필요
 
       return newKeyword;
     } catch (error) {
@@ -128,7 +162,7 @@ export class GoogleSheetsService {
     try {
       // 먼저 모든 데이터를 가져와서 해당 ID의 행을 찾음
       const range = `${this.config.sheetName}!A:G`;
-      const response = await this.request('GET', `/values/${range}`);
+      const response = await this.request('GET', `/values/${range}`, undefined, false); // 읽기는 인증 불필요
       
       if (!response.values || response.values.length <= 1) {
         throw new Error('No data found');
@@ -152,7 +186,7 @@ export class GoogleSheetsService {
       const updateRange = `${this.config.sheetName}!A${rowIndex + 2}:G${rowIndex + 2}`;
       await this.request('PUT', `/values/${updateRange}?valueInputOption=USER_ENTERED`, {
         values: [this.keywordToRow(updatedKeyword)]
-      });
+      }, true); // 쓰기 작업은 인증 필요
 
       return updatedKeyword;
     } catch (error) {
@@ -166,7 +200,7 @@ export class GoogleSheetsService {
       // Google Sheets API로 행 삭제는 복잡하므로, 
       // 대신 해당 행의 모든 셀을 비우는 방식을 사용
       const range = `${this.config.sheetName}!A:G`;
-      const response = await this.request('GET', `/values/${range}`);
+      const response = await this.request('GET', `/values/${range}`, undefined, false); // 읽기는 인증 불필요
       
       if (!response.values || response.values.length <= 1) {
         throw new Error('No data found');
@@ -183,7 +217,7 @@ export class GoogleSheetsService {
       const clearRange = `${this.config.sheetName}!A${rowIndex + 2}:G${rowIndex + 2}`;
       await this.request('PUT', `/values/${clearRange}?valueInputOption=USER_ENTERED`, {
         values: [['', '', '', '', '', '', '']]
-      });
+      }, true); // 쓰기 작업은 인증 필요
 
     } catch (error) {
       console.error('Error deleting keyword from Google Sheets:', error);
@@ -195,13 +229,13 @@ export class GoogleSheetsService {
     try {
       // 헤더가 있는지 확인하고 없으면 추가
       const range = `${this.config.sheetName}!A1:G1`;
-      const response = await this.request('GET', `/values/${range}`);
+      const response = await this.request('GET', `/values/${range}`, undefined, false); // 읽기는 인증 불필요
       
       if (!response.values || response.values.length === 0) {
         const headers = ['ID', 'Term', 'Category', 'Boost', 'Synonyms', 'Created At', 'Updated At'];
         await this.request('PUT', `/values/${range}?valueInputOption=USER_ENTERED`, {
           values: [headers]
-        });
+        }, true); // 쓰기 작업은 인증 필요
       }
     } catch (error) {
       console.error('Error initializing Google Sheets:', error);

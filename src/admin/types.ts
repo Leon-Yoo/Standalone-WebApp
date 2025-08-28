@@ -10,6 +10,7 @@ export interface Keyword {
 
 export interface GoogleSheetsConfig {
   apiKey: string;
+  clientId: string;
   spreadsheetId: string;
   sheetName: string;
 }
@@ -22,4 +23,14 @@ export interface GoogleSheetsRow {
   synonyms: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface AuthState {
+  isSignedIn: boolean;
+  accessToken?: string;
+  user?: {
+    name: string;
+    email: string;
+    picture: string;
+  };
 }
